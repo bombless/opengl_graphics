@@ -65,23 +65,37 @@ impl<'a> GlyphCache<'a> {
                             ch: char)
                             -> ([Scalar; 2], [Scalar; 2], Texture) {
             let size = ((size as f32) * 1.333).round() as u32;
-            let glyph = font.glyph(ch).unwrap_or(font.glyph(rusttype::Codepoint(0))
-                .unwrap_or(font.glyph('\u{FFd}').unwrap()));
+            let glyph = font.glyph(ch).unwrap_or_else(|| {
+                font.glyph(rusttype::Codepoint(0))
+                    .unwrap_or_else(|| font.glyph('\u{FFd}').unwrap())
+            });
             let glyph = glyph.scaled(rusttype::Scale::uniform(size as f32));
             let h_metrics = glyph.h_metrics();
             let pixel_bounding_box = glyph.exact_bounding_box().unwrap_or(rusttype::Rect {
                 min: rusttype::Point { x: 0.0, y: 0.0 },
                 max: rusttype::Point { x: 0.0, y: 0.0 },
             });
-            let pixel_bb_width = pixel_bounding_box.width();
-            let pixel_bb_height = pixel_bounding_box.height();
+            let pixel_bb_width = pixel_bounding_box.width().ceil();
+            let pixel_bb_height = pixel_bounding_box.height().ceil();
 
             let mut image_buffer = Vec::new();
-            image_buffer.resize((pixel_bb_width * pixel_bb_height) as usize, 0);
-            glyph.positioned(rusttype::point(0.0, 0.0)).draw(|x, y, v| {
-                let pos = (x + y * (pixel_bb_width as u32)) as usize;
-                image_buffer[pos] = (255.0 * v) as u8;
-            });
+
+            if pixel_bb_width as u32 != 0 && pixel_bb_height as u32 != 0 {
+                image_buffer.resize((pixel_bb_width * pixel_bb_height) as usize, 0);
+                glyph.positioned(rusttype::point(0.0, 0.0)).draw(|x, y, v| {
+                    let pos = (x + y * (pixel_bb_width as u32)) as usize;
+                    println!("x {}, y {}, w {}, h {}",
+                             x,
+                             y,
+                             pixel_bb_width as u32,
+                             pixel_bb_height as u32);
+                    if x >= pixel_bb_width as u32 || y >= pixel_bb_height as u32 {
+                        return;
+                    }
+                    image_buffer[pos] = (255.0 * v) as u8;
+                });
+            }
+
             let texture = Texture::from_memory_alpha(&image_buffer,
                                                      pixel_bb_width as u32,
                                                      pixel_bb_height as u32,
